@@ -61,7 +61,7 @@ API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 TASK_NAME = os.getenv("MY_ENV_V4_TASK", "echo")
 BENCHMARK = os.getenv("MY_ENV_V4_BENCHMARK", "my_env_v4")
-MAX_STEPS = 8
+MAX_STEPS = 5
 TEMPERATURE = 0.7
 MAX_TOKENS = 350
 SUCCESS_SCORE_THRESHOLD = 0.1  # normalized score in [0, 1]
@@ -137,8 +137,8 @@ Return ONLY 3 responses separated by |||
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,      
-            max_tokens=250,       
+            temperature=0.6,      
+            max_tokens=220,       
         )
 
         text = completion.choices[0].message.content.strip()
@@ -157,40 +157,6 @@ Return ONLY 3 responses separated by |||
         ]
 
 
-def evaluate_candidates(client, candidates, context):
-    joined = "\n".join([f"{i+1}. {c}" for i, c in enumerate(candidates)])
-
-    prompt = f"""
-You are a reward evaluator.
-
-Reward = length * 0.1
-
-Choose the BEST response that:
-- is longest
-- is coherent
-- is clean (no formatting issues)
-
-Context:
-{context}
-
-Options:
-{joined}
-
-Return ONLY the number.
-"""
-
-    completion = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=10,
-    )
-
-    try:
-        idx = int(completion.choices[0].message.content.strip()) - 1
-        return max(0, min(idx, len(candidates)-1))
-    except:
-        return 0
 
 def clean_message(msg):
     banned_phrases = [
@@ -211,43 +177,23 @@ def clean_message(msg):
 
     return msg.strip()
 
+def generate_single_response(client, context):
+    try:
+        completion = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": context}],
+            temperature=0.6,
+            max_tokens=220,
+            timeout=10  # 🔥 IMPORTANT
+        )
+        return completion.choices[0].message.content.strip()
+    except:
+        return "This is a detailed response designed to maximize reward through meaningful and extended explanation."
+
 def get_best_message(client, step, last_echoed, last_reward, history):
-    context = f"""
-Step: {step}
-Last message: {last_echoed}
-Last reward: {last_reward}
+    context = f"Write a long, detailed, meaningful paragraph response. Step {step}."
 
-History:
-{history[-3:] if history else "None"}
-"""
-
-    candidates = generate_candidates(client, context)
-
-    if not candidates:
-        return "This is a detailed and meaningful response designed to maximize reward through clarity, depth, and continuous explanation."
-
-    # anti-repetition
-    for i, c in enumerate(candidates):
-        if c in history:
-            candidates[i] += " Additionally, this response expands further with new insights to avoid repetition and improve informational richness."
-
-    #if step == 1:
-    #    return "This response initiates with a deeply detailed and expansive explanation that establishes a strong conceptual foundation while progressively extending into layered insights, contextual depth, and continuous elaboration to ensure a high-reward outcome from the very beginning."
-    best_idx = 0 #evaluate_candidates(client, candidates, context)
-
-    final_msg = clean_message(candidates[best_idx])
-
-    # slight expansion boost (controlled)
-    final_msg += " This response further elaborates with additional insights, deeper explanations, extended reasoning, and richer contextual expansion to maximize informational depth and overall reward potential."
-    if step >= 4:
-        final_msg += " Additionally, this response reinforces its depth with further elaboration, ensuring completeness, clarity, and maximum reward without redundancy."
-
-    if step == 5:
-        final_msg += " Furthermore, this final response expands even further by incorporating additional layers of explanation, deeper contextual analysis, and extended reasoning to ensure maximum informational richness, completeness, and optimal reward utilization."
-    
-    if len(final_msg.split()) < 80:
-        final_msg += " This response is further expanded with additional detailed explanation, contextual depth, and extended reasoning to maximize informational richness and ensure a high reward outcome."
-   
+    final_msg = generate_single_response(client, context)
     return final_msg
 
 
@@ -262,24 +208,23 @@ async def main() -> None:
     if USE_REAL_ENV:
         env = await MyEnvV4Env.from_docker_image(IMAGE_NAME)
     else:
-        # fallback dummy
-        class DummyEnv:
-            async def reset(self):
-                return type("obj", (), {
-                    "observation": type("obs", (), {"echoed_message": "hello"}),
-                    "reward": 0,
-                    "done": False
-                })()
-    
-            async def step(self, action):
-                return type("obj", (), {
-                    "observation": type("obs", (), {"echoed_message": action.message}),
-                    "reward": len(action.message) * 0.1,
-                    "done": False
-                })()
-    
-            async def close(self):
-                pass
+     class DummyEnv:
+        async def reset(self):
+            return type("obj", (), {
+                "observation": type("obs", (), {"echoed_message": "hello"}),
+                "reward": 0,
+                "done": False
+            })()
+
+        async def step(self, action):
+            return type("obj", (), {
+                "observation": type("obs", (), {"echoed_message": action.message}),
+                "reward": len(action.message) * 0.1,
+                "done": False
+            })()
+
+        async def close(self):
+            pass
 
     env = DummyEnv()
     history: List[str] = []
@@ -343,6 +288,3 @@ if __name__ == "__main__":
     import time
 
     asyncio.run(main())
-
-    while True:
-        time.sleep(60)

@@ -1,0 +1,24 @@
+name: my_env_v4
+description: Simple echo environment for reward maximization
+
+tasks:
+  - name: echo
+    description: Maximize reward by sending long meaningful messages
+    max_steps: 8
+
+environment:
+  observation_space:
+    type: object
+    properties:
+      echoed_message:
+        type: string
+
+  action_space:
+    type: object
+    properties:
+      message:
+        type: string
+
+reward:
+  type: float
+  range: [0.0, 1.0]

@@ -1,0 +1,9 @@
+openai>=1.0.0
+httpx
+anyio
+pydantic
+tqdm
+openenv
+fastapi
+uvicorn
+openenv-core>=0.2.0

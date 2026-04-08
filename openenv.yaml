@@ -2,9 +2,14 @@ name: my_env_v4
 description: Simple echo environment for reward maximization
 
 tasks:
-  - name: echo
-    description: Maximize reward by sending long meaningful messages
-    max_steps: 8
+  - name: echo_easy
+    description: Generate moderately long responses
+
+  - name: echo_medium
+    description: Generate long detailed responses
+
+  - name: echo_hard
+    description: Generate very long and meaningful responses
 
 environment:
   observation_space:

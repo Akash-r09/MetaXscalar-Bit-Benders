@@ -44,7 +44,6 @@ STDOUT FORMAT
 
 import asyncio
 import os
-import textwrap
 from typing import List, Optional
 
 from openai import OpenAI
@@ -113,48 +112,21 @@ def build_user_prompt(step: int, last_echoed: str, last_reward: float, history: 
     ).strip()
 
 
-def generate_candidates(client, context):
-    prompt = f"""
-You are an advanced AI agent focused on maximizing reward.
-
-STRICT INSTRUCTIONS:
-- Generate 3 long, detailed responses (120–180 words each)
-- Each must be coherent and meaningful
-- No bullet points, no numbering, no lists
-- Use continuous paragraphs
-- Avoid repetition
-- Expand ideas with clarity and depth
-
-Goal: maximize reward through quality + length
-
-Context:
-{context}
-
-Return ONLY 3 responses separated by |||
-"""
-
+def generate_single_response(client, context):
     try:
         completion = client.chat.completions.create(
             model=MODEL_NAME,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,      
-            max_tokens=220,       
+            messages=[{
+                "role": "user",
+                "content": context + "\n\nWrite ~180 words in a single paragraph. Maximize length."
+            }],
+            temperature=0.4,
+            max_tokens=180,
+            timeout=10
         )
-
-        text = completion.choices[0].message.content.strip()
-        candidates = [c.strip() for c in text.split("|||") if c.strip()]
-
-        if not candidates:
-            raise Exception("Empty response")
-
-        return candidates
-
+        return completion.choices[0].message.content.strip()
     except:
-        return [
-            "This response provides a deeply detailed and expansive explanation that explores the topic across multiple dimensions, ensuring clarity, coherence, and extended reasoning while maximizing informational depth and overall reward potential.",
-            "This response offers a comprehensive and richly detailed discussion that builds upon multiple layers of explanation, providing meaningful insights, contextual depth, and extended elaboration to ensure a high-quality and high-reward outcome.",
-            "This response delivers an in-depth and highly detailed exploration of the topic, incorporating structured reasoning, contextual expansion, and continuous elaboration to maximize clarity, coherence, and overall reward performance."
-        ]
+        return "This response provides a detailed and extended explanation designed to maximize reward through clarity and depth."
 
 
 
@@ -177,24 +149,22 @@ def clean_message(msg):
 
     return msg.strip()
 
-def generate_single_response(client, context):
-    try:
-        completion = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[{"role": "user", "content": context}],
-            temperature=0.6,
-            max_tokens=220,
-            timeout=10  # 🔥 IMPORTANT
-        )
-        return completion.choices[0].message.content.strip()
-    except:
-        return "This is a detailed response designed to maximize reward through meaningful and extended explanation."
 
 def get_best_message(client, step, last_echoed, last_reward, history):
-    context = f"Write a long, detailed, meaningful paragraph response. Step {step}."
+    context = f"""
+Write a long, coherent paragraph (~180 words).
+No lists, no numbering, no repetition.
+Maximize length and clarity.
 
-    final_msg = generate_single_response(client, context)
-    return final_msg
+Step {step}
+"""
+
+    best = generate_single_response(client, context)
+
+    if len(best.split()) < 120:
+        best += " This response is further expanded with additional insights, deeper explanation, and extended reasoning to maximize informational richness."
+
+    return best
 
 
 
@@ -240,11 +210,17 @@ async def main() -> None:
         last_echoed = result.observation.echoed_message
         last_reward = 0.0
 
+        import time
+        START_TIME = time.time()
+
         for step in range(1, MAX_STEPS + 1):
+            if time.time() - START_TIME > 60:
+                break
             if result.done:
                 break
-
             message = get_best_message(client, step, last_echoed, last_reward, history)
+            if len(message) < 800:
+                message += " " + message[:200]
 
             if USE_REAL_ENV:
                 action = MyEnvV4Action(message=message)

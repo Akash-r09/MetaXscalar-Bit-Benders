@@ -1,12 +1,12 @@
 name: my_env_v4
-description: Simple echo environment for reward maximization
+description: Echo environment with graded difficulty
 
 tasks:
   - name: echo_easy
     description: Generate moderately long responses
 
   - name: echo_medium
-    description: Generate long detailed responses
+    description: Generate longer detailed responses
 
   - name: echo_hard
     description: Generate very long and meaningful responses

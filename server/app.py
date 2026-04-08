@@ -26,7 +26,7 @@ async def reset():
         "observation": {
             "echoed_message": f"start ({state['task']})"
         },
-        "reward": 0.0,
+        "reward": 0.01,
         "done": False
     }
 
@@ -37,14 +37,18 @@ async def step(action: Action):
     msg = action.message
     task = state["task"]
 
+    # task-specific scaling
     if task == "echo_easy":
-        reward = min(0.2 + len(msg)/1200, 0.9)
-
+        base = len(msg) / 1000
     elif task == "echo_medium":
-        reward = min(0.2 + len(msg)/1200, 0.9)
-
+        base = len(msg) / 1400
     else:  # echo_hard
-        reward = min(0.2 + len(msg)/1200, 0.9)
+        base = len(msg) / 1800
+
+    reward = 0.2 + base
+    reward = min(reward, 0.9)
+
+    reward = max(0.05, min(reward, 0.95))   
 
     done = state["step"] >= 5
 
